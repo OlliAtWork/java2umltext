@@ -1,6 +1,8 @@
 package com.java2umltext;
 
+import java.util.EnumSet;
 import java.util.Optional;
+import java.util.Set;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -31,8 +33,13 @@ import com.java2umltext.model.Relationship;
 import com.java2umltext.model.UML;
 import com.java2umltext.model.Visibility;
 
-
 public class ASTVisitor extends VoidVisitorAdapter<UML> {
+
+    private static Set<Modifier.Keyword> visibilityKeywords = EnumSet.of(
+            Modifier.Keyword.DEFAULT,
+            Modifier.Keyword.PRIVATE,
+            Modifier.Keyword.PROTECTED,
+            Modifier.Keyword.PUBLIC);
 
     private final String packageName;
     private final Config config;
@@ -89,7 +96,7 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
             return;
         }
         ClassWrapper cw = (ClassWrapper) el;
-        if (cw.type().equals("record")){
+        if (cw.type().equals("record")) {
             cw.fields().add(new FieldWrapper(Visibility.PUBLIC, false, p.getTypeAsString(), p.getNameAsString()));
         }
     }
@@ -123,15 +130,15 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
         if (!config.showConstructors) {
             return;
         }
-        
+
         ClassWrapper cw = (ClassWrapper) el;
         Visibility v = getVisibility(cd);
 
         if (config.methodModifiers.contains(v)) {
             MethodWrapper mw = new MethodWrapper(
-                v, cd.isStatic(), cd.isAbstract(), cw.name(), cd.getNameAsString());
+                    v, cd.isStatic(), cd.isAbstract(), cw.name(), cd.getNameAsString());
             cw.methods().add(mw);
-            
+
             for (Parameter parameter : cd.getParameters()) {
                 mw.parameters().add(parameter.getTypeAsString());
             }
@@ -150,13 +157,13 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
 
         if (config.methodModifiers.contains(v)) {
             MethodWrapper mw = new MethodWrapper(
-                v, md.isStatic(), md.isAbstract(), md.getTypeAsString(), md.getNameAsString());
+                    v, md.isStatic(), md.isAbstract(), md.getTypeAsString(), md.getNameAsString());
             cw.methods().add(mw);
-            
+
             for (Parameter parameter : md.getParameters()) {
                 mw.parameters().add(parameter.getTypeAsString());
             }
-            
+
             if (config.showMethodRelationships) {
                 addRelationship("..", md.getType(), cw);
                 for (Parameter parameter : md.getParameters()) {
@@ -169,18 +176,17 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
     private void parseClassLike(TypeDeclaration<?> td, Document doc) {
         String pkg = config.showPackage ? packageName : "";
         String name = td.getNameAsString();
-        
+
         // find first parent CompilationUnit (if inner class)
         Node node = td.getParentNode().get();
-        while(node instanceof ClassOrInterfaceDeclaration){
+        while (node instanceof ClassOrInterfaceDeclaration) {
             name = ((ClassOrInterfaceDeclaration) node).getNameAsString() + "." + name;
             node = node.getParentNode().get();
             if (node instanceof CompilationUnit) {
                 doc.addRelationship(new Relationship(
-                    "+..", 
-                    ClassWrapper.pkgPrefix(pkg) + name, 
-                    ClassWrapper.pkgPrefix(pkg) + name.substring(0, name.lastIndexOf(".")))
-                );
+                        "+..",
+                        ClassWrapper.pkgPrefix(pkg) + name,
+                        ClassWrapper.pkgPrefix(pkg) + name.substring(0, name.lastIndexOf("."))));
             }
         }
 
@@ -189,7 +195,7 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
 
         // add imports
         if (node instanceof CompilationUnit) {
-            for(ImportDeclaration id : ((CompilationUnit) node).getImports()){
+            for (ImportDeclaration id : ((CompilationUnit) node).getImports()) {
                 cw.imports().put(id.getName().getIdentifier(), id.getName().toString());
             }
         }
@@ -216,11 +222,11 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
         }
     }
 
-    private void addRelationship(String relationship, Type type, ClassWrapper cw){
-        if(type instanceof ClassOrInterfaceType) {
+    private void addRelationship(String relationship, Type type, ClassWrapper cw) {
+        if (type instanceof ClassOrInterfaceType) {
             ClassOrInterfaceType classOrInterfaceType = type.asClassOrInterfaceType();
             Optional<NodeList<Type>> typeArguments = classOrInterfaceType.getTypeArguments();
-            if (typeArguments.isPresent()){
+            if (typeArguments.isPresent()) {
                 type = typeArguments.get().get(0);
             }
         }
@@ -229,7 +235,7 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
         if (cw.imports().containsKey(type.asString())) {
             source = config.showPackage ? cw.imports().get(type.asString()) : type.asString();
         }
-        
+
         String target = cw.pkgPrefix() + cw.name();
         cw.document().addRelationship(new Relationship(relationship, source, target));
     }
@@ -241,9 +247,9 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
                 return "interface";
             } else {
                 return (cid.getModifiers().stream()
-                    .map(Modifier::toString)
-                    .filter(m -> m.contains("abstract"))
-                    .findAny().orElse("").trim() + " class").trim();
+                        .filter(m -> Modifier.abstractModifier().equals(m))
+                        .map(m -> "abstract")
+                        .findAny().orElse("") + " class").trim();
             }
         } else if (td instanceof EnumDeclaration) {
             return "enum";
@@ -255,8 +261,10 @@ public class ASTVisitor extends VoidVisitorAdapter<UML> {
 
     private static <T extends Node> Visibility getVisibility(NodeWithModifiers<T> node) {
         return node.getModifiers().stream()
-            .map(Modifier::toString)
-            .map(Visibility::fromString)
-            .findFirst().orElse(Visibility.DEFAULT);
+                .map(Modifier::getKeyword)
+                .filter(visibilityKeywords::contains)
+                .map(Modifier.Keyword::name)
+                .map(Visibility::valueOf)
+                .findFirst().orElse(Visibility.DEFAULT);
     }
 }
