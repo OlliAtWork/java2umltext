@@ -24,8 +24,8 @@ repositories {
 }
 
 dependencies {
-    implementation "com.github.javaparser:javaparser-core:3.24.2"
-    implementation 'info.picocli:picocli:4.6.3'
+    implementation "com.github.javaparser:javaparser-core:3.26.2"
+    implementation 'info.picocli:picocli:4.7.6'
 }
 
 
